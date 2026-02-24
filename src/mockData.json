@@ -1,0 +1,54 @@
+{
+  "teams": [
+    {
+      "id": "team-mobile",
+      "name": "Mobile",
+      "capacity": 20,
+      "issues": [
+        { "id": "MOB-1", "type": "Epic", "summary": "Implement new login flow", "status": "In Progress" },
+        { "id": "MOB-2", "type": "Task", "summary": "Update SSO token refresh", "status": "To Do" }
+      ]
+    },
+    {
+      "id": "team-web",
+      "name": "Web",
+      "capacity": 30,
+      "issues": [
+        { "id": "WEB-1", "type": "Epic", "summary": "React 18 migration", "status": "In Progress" },
+        { "id": "WEB-2", "type": "Task", "summary": "Add accessibility tags", "status": "Done" },
+        { "id": "WEB-3", "type": "Story", "summary": "Integrate new analytics", "status": "To Do" }
+      ]
+    },
+    {
+      "id": "team-backend",
+      "name": "Backend",
+      "capacity": 25,
+      "issues": [
+        { "id": "BE-1", "type": "Epic", "summary": "Database scale out", "status": "In Progress" },
+        { "id": "BE-2", "type": "Task", "summary": "Optimize query times for user dashboard", "status": "To Do" }
+      ]
+    },
+    {
+      "id": "team-cloud",
+      "name": "Cloud",
+      "capacity": 15,
+      "issues": [
+        { "id": "CL-1", "type": "Epic", "summary": "Migrate to Kubernetes", "status": "Backlog" }
+      ]
+    },
+    {
+      "id": "team-qa",
+      "name": "QA",
+      "capacity": 20,
+      "issues": [
+        { "id": "QA-1", "type": "Epic", "summary": "E2E Test coverage expansion", "status": "In Progress" },
+        { "id": "QA-2", "type": "Bug", "summary": "Login page visual glitch on mobile", "status": "To Do" }
+      ]
+    }
+  ],
+  "dependencies": [
+    { "sourceIssueID": "MOB-2", "targetIssueID": "BE-2", "type": "blocks" },
+    { "sourceIssueID": "WEB-3", "targetIssueID": "BE-1", "type": "depends on" },
+    { "sourceIssueID": "QA-1", "targetIssueID": "CL-1", "type": "relates to" }
+  ]
+}

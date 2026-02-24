@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus-Grid Advanced Roadmaps (Zero-Build Preview)</title>
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            atlassian: {
+              primary: '#0052CC',
+              background: { default: '#FFFFFF', gray: '#F4F5F7' },
+              border: '#DFE1E6',
+            }
+          },
+          fontFamily: { sans: ['Inter', 'Charlie', 'sans-serif'] },
+          spacing: { '1': '8px', '2': '16px', '3': '24px', '4': '32px', '5': '40px', '6': '48px' },
+          borderRadius: { 'jira': '2px' }
+        }
+      }
+    }
+  </script>
+  <!-- React & ReactDOM (UMD via CDN) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel (Stand-alone for JSX via CDN) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Lucide Icons (Vanilla JS) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #F4F5F7;
+    }
+
+    .line-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo, Fragment } = React;
+
+    // --- Mock Data ---
+    const mockData = {
+      "teams": [
+        {
+          "id": "team-mobile", "name": "Mobile", "capacity": 30,
+          "issues": [
+            { "id": "MOB-1", "type": "Epic", "summary": "Implement new login flow", "stage": "In Design", "assignee": "Bob" },
+            { "id": "MOB-2", "type": "Task", "summary": "Update SSO token", "stage": "Dev", "assignee": "Alice" },
+            { "id": "MOB-3", "type": "Middleware", "summary": "Auth API Gateway Integration", "stage": "In Design", "tag": "AuthService", "assignee": "Charlie" },
+            { "id": "MOB-4", "type": "Bug", "summary": "Dark mode text invisible", "stage": "Test", "assignee": "Eve" },
+            { "id": "MOB-5", "type": "Story", "summary": "Push notifications v2", "stage": "In Design", "assignee": "Bob" },
+            { "id": "MOB-6", "type": "Task", "summary": "Update onboarding screens", "stage": "Backlog", "assignee": "Unassigned" },
+            { "id": "MOB-7", "type": "Story", "summary": "Accessibility review", "stage": "Dev", "assignee": "Alice" },
+            { "id": "MOB-8", "type": "Bug", "summary": "Crash on biometric login", "stage": "Dev", "assignee": "Bob" },
+            { "id": "MOB-9", "type": "Task", "summary": "Analytics events mapping", "stage": "Test", "assignee": "Charlie" },
+            { "id": "MOB-10", "type": "Epic", "summary": "Offline mode support", "stage": "Done", "assignee": "Eve" }
+          ]
+        },
+        {
+          "id": "team-web", "name": "Web", "capacity": 45,
+          "issues": [
+            { "id": "WEB-1", "type": "Epic", "summary": "React 18 migration", "stage": "Dev", "assignee": "Alice" },
+            { "id": "WEB-2", "type": "Task", "summary": "Add accessibility tags", "stage": "Done", "assignee": "Bob" },
+            { "id": "WEB-3", "type": "Story", "summary": "Integrate new analytics", "stage": "Dev", "assignee": "Charlie" },
+            { "id": "WEB-4", "type": "Middleware", "summary": "GraphQL layer optimiser", "stage": "In Design", "tag": "DataLayer", "assignee": "Eve" },
+            { "id": "WEB-5", "type": "Bug", "summary": "Dropdown menu closing on hover", "stage": "Backlog", "assignee": "Unassigned" },
+            { "id": "WEB-6", "type": "Story", "summary": "User dashboard redesign", "stage": "Dev", "assignee": "Frank" },
+            { "id": "WEB-7", "type": "Story", "summary": "Payment gateway update", "stage": "Test", "assignee": "Alice" },
+            { "id": "WEB-8", "type": "Task", "summary": "SEO audit", "stage": "Done", "assignee": "Frank" },
+            { "id": "WEB-9", "type": "Epic", "summary": "Internationalization setup", "stage": "Backlog", "assignee": "Unassigned" },
+            { "id": "WEB-10", "type": "Task", "summary": "Refactor profile component", "stage": "Test", "assignee": "Eve" }
+          ]
+        },
+        {
+          "id": "team-backend", "name": "Backend", "capacity": 40,
+          "issues": [
+            { "id": "BE-1", "type": "Epic", "summary": "Database scale out", "stage": "In Design", "assignee": "Grace" },
+            { "id": "BE-2", "type": "Task", "summary": "Optimize query times", "stage": "Dev", "assignee": "Alice" },
+            { "id": "BE-3", "type": "Middleware", "summary": "Message Queue Service", "stage": "Dev", "tag": "DataLayer", "assignee": "Grace" },
+            { "id": "BE-4", "type": "Story", "summary": "User data export API", "stage": "Test", "assignee": "Hank" },
+            { "id": "BE-5", "type": "Bug", "summary": "Memory leak in worker pool", "stage": "Done", "assignee": "Ivy" },
+            { "id": "BE-6", "type": "Task", "summary": "Update third-party libs", "stage": "Backlog", "assignee": "Unassigned" },
+            { "id": "BE-7", "type": "Epic", "summary": "Move to cloud native storage", "stage": "Backlog", "assignee": "Hank" },
+            { "id": "BE-8", "type": "Bug", "summary": "Timezone offset incorrect", "stage": "In Design", "assignee": "Ivy" },
+            { "id": "BE-9", "type": "Story", "summary": "Add 2FA support endpoints", "stage": "Dev", "assignee": "Grace" },
+            { "id": "BE-10", "type": "Task", "summary": "Deprecate v1 API", "stage": "Done", "assignee": "Hank" }
+          ]
+        },
+        {
+          "id": "team-cloud", "name": "Cloud", "capacity": 25,
+          "issues": [
+            { "id": "CL-1", "type": "Epic", "summary": "Migrate to Kubernetes", "stage": "Dev", "assignee": "Jack" },
+            { "id": "CL-2", "type": "Middleware", "summary": "CI/CD Pipeline shared lib", "stage": "In Design", "tag": "Deployment", "assignee": "Jack" },
+            { "id": "CL-3", "type": "Story", "summary": "Setup prometheus alerts", "stage": "Test", "assignee": "Karen" },
+            { "id": "CL-4", "type": "Task", "summary": "Rotate AWS keys", "stage": "Done", "assignee": "Karen" },
+            { "id": "CL-5", "type": "Bug", "summary": "CDN invalidation failure", "stage": "Backlog", "assignee": "Unassigned" },
+            { "id": "CL-6", "type": "Epic", "summary": "Multi-region fallback", "stage": "Backlog", "assignee": "Jack" },
+            { "id": "CL-7", "type": "Story", "summary": "Auto-scaling rules config", "stage": "Dev", "assignee": "Karen" },
+            { "id": "CL-8", "type": "Task", "summary": "Cost optimization review", "stage": "In Design", "assignee": "Liam" },
+            { "id": "CL-9", "type": "Bug", "summary": "OOM killer targeting pods", "stage": "Test", "assignee": "Liam" },
+            { "id": "CL-10", "type": "Story", "summary": "WAF implementation", "stage": "Dev", "assignee": "Jack" }
+          ]
+        },
+        {
+          "id": "team-qa", "name": "QA", "capacity": 30,
+          "issues": [
+            { "id": "QA-1", "type": "Epic", "summary": "E2E Test coverage expansion", "stage": "Dev", "assignee": "Mia" },
+            { "id": "QA-2", "type": "Bug", "summary": "Test flaky on mobile layout", "stage": "Backlog", "assignee": "Unassigned" },
+            { "id": "QA-3", "type": "Story", "summary": "Automated security scans", "stage": "In Design", "assignee": "Noah" },
+            { "id": "QA-4", "type": "Middleware", "summary": "Test environment seeder", "stage": "Dev", "tag": "AuthService", "assignee": "Mia" },
+            { "id": "QA-5", "type": "Task", "summary": "Update Cypress version", "stage": "Done", "assignee": "Noah" },
+            { "id": "QA-6", "type": "Epic", "summary": "Performance testing suite", "stage": "Backlog", "assignee": "Unassigned" },
+            { "id": "QA-7", "type": "Bug", "summary": "False positives in CI", "stage": "Dev", "assignee": "Mia" },
+            { "id": "QA-8", "type": "Task", "summary": "Write manual test cases", "stage": "In Design", "assignee": "Noah" },
+            { "id": "QA-9", "type": "Story", "summary": "Contract testing with BE", "stage": "Dev", "assignee": "Mia" },
+            { "id": "QA-10", "type": "Task", "summary": "Review recent hotfixes", "stage": "Done", "assignee": "Noah" }
+          ]
+        }
+      ],
+      "dependencies": [
+        { "sourceIssueID": "MOB-2", "targetIssueID": "BE-2", "type": "blocks" },
+        { "sourceIssueID": "MOB-3", "targetIssueID": "WEB-1", "type": "depends on" },
+        { "sourceIssueID": "WEB-3", "targetIssueID": "BE-1", "type": "depends on" },
+        { "sourceIssueID": "WEB-6", "targetIssueID": "BE-9", "type": "blocks" },
+        { "sourceIssueID": "BE-3", "targetIssueID": "CL-1", "type": "relates to" },
+        { "sourceIssueID": "QA-1", "targetIssueID": "CL-1", "type": "relates to" },
+        { "sourceIssueID": "QA-4", "targetIssueID": "BE-4", "type": "blocks" },
+        { "sourceIssueID": "CL-2", "targetIssueID": "MOB-1", "type": "depends on" },
+        { "sourceIssueID": "MOB-8", "targetIssueID": "QA-7", "type": "blocks" },
+        { "sourceIssueID": "WEB-4", "targetIssueID": "BE-8", "type": "relates to" },
+        { "sourceIssueID": "CL-1", "targetIssueID": "QA-5", "type": "blocks" }, /* critical path link */
+        { "sourceIssueID": "WEB-1", "targetIssueID": "WEB-7", "type": "depends on" },
+        { "sourceIssueID": "WEB-7", "targetIssueID": "WEB-8", "type": "blocks" }
+      ]
+    };
+
+    // --- Icon Helper ---
+    const Icon = ({ name, color, size = 16, className = "" }) => {
+      useEffect(() => {
+        lucide.createIcons();
+      });
+      return <i data-lucide={name} width={size} height={size} stroke={color} className={className}></i>;
+    };
+
+    const getIconDetails = (type) => {
+      switch (type.toLowerCase()) {
+        case 'epic': return { name: 'layers', color: '#9333ea' }; // text-purple-600
+        case 'story': return { name: 'bookmark', color: '#22c55e' }; // text-green-500
+        case 'bug': return { name: 'alert-circle', color: '#ef4444' }; // text-red-500
+        case 'task': default: return { name: 'check-square', color: '#3b82f6' }; // text-blue-500
+      }
+    };
+
+    // --- AtlassianCard Component (Mini-Card) ---
+    const AtlassianCard = ({ id, summary, type, status, hasConflict, inPresentationPath, presentationModeOn }) => {
+      const iconDetails = getIconDetails(type);
+      const isMiddleware = type.toLowerCase() === 'middleware';
+
+      // Presentation Opacity Logic
+      let opacityClass = presentationModeOn ? (inPresentationPath ? "opacity-100 ring-2 ring-atlassian-primary" : "opacity-30") : "opacity-100";
+
+      return (
+        <div
+          id={`ticket-${id}`}
+          className={`bg-atlassian-background-default border border-atlassian-border rounded-jira px-2 py-1.5 hover:bg-atlassian-background-gray transition-colors cursor-pointer w-full max-w-sm flex items-center gap-2 relative shadow-sm h-[32px] ${opacityClass} ${hasConflict ? 'ring-2 ring-red-500 animate-pulse bg-red-50 border-red-500' : ''}`}
+        >
+          {isMiddleware && !hasConflict && (
+            <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#6554C0] rounded-l-jira" />
+          )}
+          {hasConflict && (
+            <div className="absolute -top-1.5 -right-1.5 bg-white rounded-full text-red-500 drop-shadow-md z-10" title="Duplicate Middleware Conflict Detected">
+              <Icon name="alert-octagon" color="#ef4444" size={14} className="fill-red-50" />
+            </div>
+          )}
+          <div className={`flex-shrink-0 ${isMiddleware ? 'ml-1' : ''}`}>
+            <Icon name={iconDetails.name} color={iconDetails.color} size={14} />
+          </div>
+          <span className="text-xs font-sans text-gray-500 font-medium min-w-[50px]">{id}</span>
+          <div className="text-xs font-sans font-medium text-gray-800 truncate flex-grow" title={summary}>
+            {summary}
+          </div>
+        </div>
+      );
+    };
+
+    // --- StageCell Component (Replaces SprintCell) ---
+    const StageCell = ({ issues, conflictTickets = new Set(), inPresentationPath = new Set(), presentationModeOn = false }) => {
+      const [isExpanded, setIsExpanded] = useState(false);
+
+      if (!issues || issues.length === 0) {
+        return <div className="p-2 h-full flex flex-col gap-1.5 relative border-r border-transparent"></div>;
+      }
+
+      const visibleIssues = isExpanded ? issues : issues.slice(0, 3);
+      const hiddenCount = issues.length - 3;
+
+      return (
+        <div className="p-2 h-full flex flex-col gap-1.5 relative transition-all duration-300">
+          {visibleIssues.map(issue => (
+            <AtlassianCard
+              key={issue.id}
+              {...issue}
+              hasConflict={conflictTickets.has(issue.id)}
+              inPresentationPath={inPresentationPath.has(issue.id)}
+              presentationModeOn={presentationModeOn}
+            />
+          ))}
+
+          {!isExpanded && hiddenCount > 0 && (
+            <button
+              onClick={() => setIsExpanded(true)}
+              className="mt-0.5 text-[11px] font-sans font-semibold text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 border border-transparent hover:border-gray-300 rounded-sm py-1 px-2 w-full text-center transition-colors shadow-sm"
+            >
+              + {hiddenCount} more
+            </button>
+          )}
+        </div>
+      );
+    };
+
+    // --- OverlayCanvas Component ---
+    const OverlayCanvas = ({ activePopover, setActivePopover, presentationModeOn }) => {
+      const [connections, setConnections] = useState([]);
+
+      const updateConnections = useCallback(() => {
+        const newConnections = [];
+        mockData.dependencies.forEach(dep => {
+          const sourceEl = document.getElementById(`ticket-${dep.sourceIssueID}`);
+          const targetEl = document.getElementById(`ticket-${dep.targetIssueID}`);
+          if (sourceEl && targetEl) {
+            const sourceRect = sourceEl.getBoundingClientRect();
+            const targetRect = targetEl.getBoundingClientRect();
+
+            const sx = sourceRect.right;
+            const sy = sourceRect.top + sourceRect.height / 2;
+            const tx = targetRect.left;
+            const ty = targetRect.top + targetRect.height / 2;
+
+            newConnections.push({
+              source: dep.sourceIssueID, target: dep.targetIssueID, type: dep.type,
+              sourcePoint: { x: sx, y: sy },
+              targetPoint: { x: tx, y: ty }
+            });
+          }
+        });
+        setConnections(newConnections);
+      }, []);
+
+      useEffect(() => {
+        const timer = setTimeout(updateConnections, 300);
+        window.addEventListener('resize', updateConnections);
+        document.addEventListener('scroll', updateConnections, true);
+
+        const interval = setInterval(updateConnections, 1000);
+        return () => {
+          clearTimeout(timer);
+          clearInterval(interval);
+          window.removeEventListener('resize', updateConnections);
+          document.removeEventListener('scroll', updateConnections, true);
+        };
+      }, [updateConnections]);
+
+      const handlePathClick = (e, conn) => {
+        e.stopPropagation();
+        setActivePopover({
+          x: e.clientX,
+          y: e.clientY,
+          conn
+        });
+      };
+
+      return (
+        <svg className="absolute inset-0 z-50 pointer-events-none" style={{ minHeight: '100%', minWidth: '100%', width: '100%', height: '100%' }}>
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#42526E" />
+            </marker>
+          </defs>
+          {connections.map((conn, idx) => {
+            const { sourcePoint: s, targetPoint: t } = conn;
+            const distance = Math.abs(t.x - s.x);
+            const offset = Math.max(distance * 0.4, 60);
+            const path = `M ${s.x} ${s.y} C ${s.x + offset} ${s.y}, ${t.x - offset} ${t.y}, ${t.x} ${t.y}`;
+
+            return (
+              <path
+                key={idx}
+                d={path}
+                fill="none"
+                stroke="#42526E"
+                strokeWidth="2.5"
+                markerEnd="url(#arrowhead)"
+                className={`transition-opacity duration-300 pointer-events-auto hover:stroke-atlassian-primary cursor-pointer ${presentationModeOn ? 'opacity-20' : 'opacity-80'} drop-shadow-sm`}
+                onClick={(e) => handlePathClick(e, conn)}
+              />
+            );
+          })}
+        </svg>
+      );
+    };
+
+    // --- ProcessGrid Component (Replaces TimelineGrid) ---
+    const STAGES = ['Backlog', 'In Design', 'Dev', 'Test', 'Done'];
+
+    const ProcessGrid = () => {
+      const [presentationModeOn, setPresentationModeOn] = useState(false);
+      const [activePopover, setActivePopover] = useState(null);
+
+      // --- Governance Engine ---
+      const governanceCalculations = useMemo(() => {
+        let riskScore = 0;
+        let totalTags = 0;
+        let redundantTags = 0;
+
+        const devAssignees = {};
+        const tagMap = {};
+        const conflictTickets = new Set();
+
+        // 1. First pass to map tags and assignees
+        mockData.teams.forEach(team => {
+          team.issues.forEach(issue => {
+            // Resource Risk: Dev tickets per assignee
+            if (issue.stage.toLowerCase() === 'dev' && issue.assignee && issue.assignee !== 'Unassigned') {
+              devAssignees[issue.assignee] = (devAssignees[issue.assignee] || 0) + 1;
+            }
+
+            // Tag mapping for duplicates (Middleware inside Design/Dev)
+            if (issue.tag) {
+              totalTags++;
+              if (!tagMap[issue.tag]) tagMap[issue.tag] = new Set();
+              tagMap[issue.tag].add(team.id);
+            }
+          });
+        });
+
+        // 2. Resource Risk Calculation
+        Object.values(devAssignees).forEach(count => {
+          if (count > 2) riskScore++;
+        });
+
+        // 3. Conflict Detection & Redundancy Score calculation
+        mockData.teams.forEach(team => {
+          team.issues.forEach(issue => {
+            if (issue.tag && tagMap[issue.tag].size > 1) {
+              redundantTags++; // Any ticket with a shared tag is redundant
+
+              const stageLower = issue.stage.toLowerCase();
+              if (issue.type.toLowerCase() === 'middleware' && (stageLower === 'in design' || stageLower === 'dev')) {
+                conflictTickets.add(issue.id);
+              }
+            }
+          });
+        });
+
+        const redundancyPercent = totalTags > 0 ? Math.round((redundantTags / totalTags) * 100) : 0;
+
+        return {
+          totalDependencies: mockData.dependencies.length,
+          resourceRisk: riskScore,
+          redundancyScore: redundancyPercent,
+          conflictTickets
+        };
+      }, []);
+
+      // --- Data Transformation for Grid ---
+      const teamData = useMemo(() => {
+        return mockData.teams.map(team => {
+          const stages = STAGES.map(name => ({ name, issues: [] }));
+          let wipCount = 0;
+
+          team.issues.forEach(issue => {
+            let stageIdx = STAGES.findIndex(s => s.toLowerCase() === issue.stage.toLowerCase());
+            if (stageIdx === -1) stageIdx = 0;
+
+            stages[stageIdx].issues.push(issue);
+
+            if (stageIdx > 0 && stageIdx < STAGES.length - 1) {
+              wipCount++;
+            }
+          });
+
+          return { ...team, stages, wipCount };
+        });
+      }, []);
+
+      // (Placeholder for Presentation Mode Logic)
+      const inPresentationPath = new Set();
+
+      return (
+        <div className="min-h-screen bg-atlassian-background-gray pb-8 relative overflow-x-auto">
+          {/* Governance Dashboard Header */}
+          <div className="sticky top-0 z-40 bg-white border-b border-atlassian-border shadow-sm px-8 py-4 mb-6 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold font-sans text-gray-800 flex items-center gap-2">
+                <Icon name="layout-template" color="#0052CC" size={20} />
+                Nexus-Grid Governance
+              </h1>
+              <span className="text-xs text-gray-500 font-sans mt-0.5 block">Automated Portfolio Health & Detection</span>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Total Dependencies</span>
+                <span className="text-lg font-bold text-gray-800 font-sans">{governanceCalculations.totalDependencies}</span>
+              </div>
+              <div className="h-8 w-px bg-gray-200"></div>
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1">
+                  Resource Risk
+                  {governanceCalculations.resourceRisk > 0 && <Icon name="alert-triangle" color="#ef4444" size={10} />}
+                </span>
+                <span className={`text-lg font-bold font-sans ${governanceCalculations.resourceRisk > 0 ? 'text-red-500' : 'text-gray-800'}`}>
+                  {governanceCalculations.resourceRisk} <span className="text-xs font-normal text-gray-500">bottlenecks</span>
+                </span>
+              </div>
+              <div className="h-8 w-px bg-gray-200"></div>
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Redundancy Score</span>
+                <span className={`text-lg font-bold font-sans ${governanceCalculations.redundancyScore > 15 ? 'text-orange-500' : 'text-green-500'}`}>
+                  {governanceCalculations.redundancyScore}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mx-auto w-max relative min-w-full px-8 transition-all duration-500">
+            <div className="grid gap-y-2 relative" style={{ gridTemplateColumns: `260px repeat(${STAGES.length}, 240px)` }}>
+              <div className="col-start-1 text-xs font-semibold text-gray-500 uppercase tracking-wider p-2">Team Info</div>
+              {STAGES.map((s, idx) => (
+                <div key={idx} className="text-xs font-semibold text-gray-500 uppercase tracking-wider p-2">{s}</div>
+              ))}
+
+              {teamData.map(team => (
+                <Fragment key={team.id}>
+                  <div className="bg-white border border-atlassian-border rounded-l-jira p-4 flex flex-col justify-center sticky left-0 z-10 shadow-sm transition-opacity duration-300">
+                    <h3 className="text-sm font-bold text-gray-800 font-sans">{team.name}</h3>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-xs text-gray-500 font-sans">Vel: {team.capacity} <span className="text-gray-400">pt</span></span>
+                      <span className="text-[10px] text-gray-300">|</span>
+                      <span className="text-xs text-gray-500 font-sans font-medium text-atlassian-primary bg-blue-50 px-1.5 py-0.5 rounded">WIP: {team.wipCount}</span>
+                    </div>
+                  </div>
+                  {team.stages.map((stage, idx) => (
+                    <div key={idx} className={`border-t border-b border-atlassian-border ${idx === team.stages.length - 1 ? 'border-r rounded-r-jira' : 'border-r'} bg-white transition-colors duration-300`}>
+                      <StageCell
+                        issues={stage.issues}
+                        conflictTickets={governanceCalculations.conflictTickets}
+                        inPresentationPath={inPresentationPath}
+                        presentationModeOn={presentationModeOn}
+                      />
+                    </div>
+                  ))}
+                </Fragment>
+              ))}
+            </div>
+            <OverlayCanvas />
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ProcessGrid />);
+  </script>
+</body>
+
+</html>
