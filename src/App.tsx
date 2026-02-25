@@ -1,4 +1,3 @@
-import React from 'react';
 import { TimelineGrid } from './components/TimelineGrid';
 
 function App() {
