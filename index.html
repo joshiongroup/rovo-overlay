@@ -169,17 +169,52 @@
     };
 
     // --- AtlassianCard Component (Mini-Card) ---
-    const AtlassianCard = ({ id, summary, type, status, hasConflict, inPresentationPath, presentationModeOn }) => {
+    const AtlassianCard = ({ id, summary, type, status, hasConflict, inPresentationPath, presentationModeOn, teamId, stage, isFocused, isFocusDimmed, isMultiSelected, onFocusSelect }) => {
       const iconDetails = getIconDetails(type);
       const isMiddleware = type.toLowerCase() === 'middleware';
 
-      // Presentation Opacity Logic
-      let opacityClass = presentationModeOn ? (inPresentationPath ? "opacity-100 ring-2 ring-atlassian-primary" : "opacity-30") : "opacity-100";
+      // Advanced Opacity Logic (Presentation Mode vs. Focus Mode)
+      let opacityClass = "opacity-100 hover:z-20";
+
+      if (presentationModeOn) {
+        opacityClass = inPresentationPath ? "opacity-100 ring-2 ring-atlassian-primary z-20" : "opacity-30";
+      } else if (isFocused) {
+        opacityClass = "opacity-100 ring-2 ring-[#FF8B00] shadow-md z-30 scale-[1.02]";
+      } else if (isFocusDimmed) {
+        opacityClass = "opacity-20";
+      } else if (isMultiSelected) {
+        opacityClass = "opacity-100 ring-2 ring-atlassian-primary shadow-md z-30 scale-[1.02]";
+      }
+
+
+      // Drag Implementation
+      const handleDragStart = (e) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ id, sourceTeamId: teamId, sourceStage: stage }));
+        e.dataTransfer.effectAllowed = 'move';
+
+        // Slight visual cue while dragging
+        setTimeout(() => {
+          const el = document.getElementById(`ticket-${id}`);
+          if (el) el.classList.add('opacity-50');
+        }, 0);
+      };
+
+      const handleDragEnd = (e) => {
+        const el = document.getElementById(`ticket-${id}`);
+        if (el) el.classList.remove('opacity-50');
+      };
 
       return (
         <div
           id={`ticket-${id}`}
-          className={`bg-atlassian-background-default border border-atlassian-border rounded-jira px-2 py-1.5 hover:bg-atlassian-background-gray transition-colors cursor-pointer w-full max-w-sm flex items-center gap-2 relative shadow-sm h-[32px] ${opacityClass} ${hasConflict ? 'ring-2 ring-red-500 animate-pulse bg-red-50 border-red-500' : ''}`}
+          draggable={true}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFocusSelect(id, e.metaKey || e.ctrlKey);
+          }}
+          className={`bg-atlassian-background-default border border-atlassian-border rounded-jira px-2 py-1.5 hover:bg-atlassian-background-gray transition-all cursor-move w-full max-w-sm flex items-center gap-2 relative shadow-sm hover:shadow-md h-[32px] ${opacityClass} ${hasConflict && !isMultiSelected ? 'ring-2 ring-red-500 animate-pulse bg-red-50 border-red-500' : ''}`}
         >
           {isMiddleware && !hasConflict && (
             <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#6554C0] rounded-l-jira" />
@@ -200,28 +235,77 @@
       );
     };
 
-    // --- StageCell Component (Replaces SprintCell) ---
-    const StageCell = ({ issues, conflictTickets = new Set(), inPresentationPath = new Set(), presentationModeOn = false }) => {
+    // --- StageCell Component ---
+    const StageCell = ({ issues, teamId, stageName, onDropIssue, conflictTickets = new Set(), inPresentationPath = new Set(), presentationModeOn = false, focusedTicket, multiSelectedTickets = new Set(), focusedDependencies = new Set(), onFocusSelect }) => {
       const [isExpanded, setIsExpanded] = useState(false);
+      const [isDragOver, setIsDragOver] = useState(false);
+
+      const handleDragOver = (e) => {
+        e.preventDefault(); // Necessary to allow dropping
+        e.dataTransfer.dropEffect = 'move';
+        setIsDragOver(true);
+      };
+
+      const handleDragLeave = () => {
+        setIsDragOver(false);
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const data = e.dataTransfer.getData('text/plain');
+        if (data) {
+          try {
+            const parsedData = JSON.parse(data);
+            onDropIssue(parsedData.id, parsedData.sourceTeamId, parsedData.sourceStage, teamId, stageName);
+          } catch (err) {
+            console.error("Drop failed:", err);
+          }
+        }
+      };
+
+      const cellBgStyle = isDragOver ? 'bg-blue-50 border-dashed border-2 border-atlassian-primary rounded z-10' : 'border-r border-transparent';
 
       if (!issues || issues.length === 0) {
-        return <div className="p-2 h-full flex flex-col gap-1.5 relative border-r border-transparent"></div>;
+        return <div
+          className={`p-2 h-full flex flex-col gap-1.5 relative transition-colors duration-200 ${cellBgStyle}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        ></div>;
       }
 
       const visibleIssues = isExpanded ? issues : issues.slice(0, 3);
       const hiddenCount = issues.length - 3;
 
       return (
-        <div className="p-2 h-full flex flex-col gap-1.5 relative transition-all duration-300">
-          {visibleIssues.map(issue => (
-            <AtlassianCard
-              key={issue.id}
-              {...issue}
-              hasConflict={conflictTickets.has(issue.id)}
-              inPresentationPath={inPresentationPath.has(issue.id)}
-              presentationModeOn={presentationModeOn}
-            />
-          ))}
+        <div
+          className={`p-2 h-full flex flex-col gap-1.5 relative transition-all duration-300 ${cellBgStyle}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {visibleIssues.map(issue => {
+            const isFocused = focusedTicket === issue.id;
+            const isMultiSelected = multiSelectedTickets.has(issue.id);
+            const isFocusDimmed = focusedTicket && !isFocused && !focusedDependencies.has(issue.id);
+
+            return (
+              <AtlassianCard
+                key={issue.id}
+                {...issue}
+                teamId={teamId}
+                stage={stageName}
+                hasConflict={conflictTickets.has(issue.id)}
+                inPresentationPath={inPresentationPath.has(issue.id)}
+                presentationModeOn={presentationModeOn}
+                isFocused={isFocused}
+                isFocusDimmed={isFocusDimmed}
+                isMultiSelected={isMultiSelected}
+                onFocusSelect={onFocusSelect}
+              />
+            );
+          })}
 
           {!isExpanded && hiddenCount > 0 && (
             <button
@@ -236,22 +320,37 @@
     };
 
     // --- OverlayCanvas Component ---
-    const OverlayCanvas = ({ activePopover, setActivePopover, presentationModeOn }) => {
+    const OverlayCanvas = ({ activePopover, setActivePopover, presentationModeOn, gridData, showConnections, focusedTicket, focusedDependencies }) => {
       const [connections, setConnections] = useState([]);
 
       const updateConnections = useCallback(() => {
+        if (!showConnections) {
+          setConnections([]);
+          return;
+        }
+
+        const container = document.getElementById('canvas-container');
+        if (!container) return;
+        const containerRect = container.getBoundingClientRect();
+
         const newConnections = [];
-        mockData.dependencies.forEach(dep => {
+        gridData.dependencies.forEach(dep => {
+          // If in focus mode, only draw lines connected to the focused ticket
+          if (focusedTicket && dep.sourceIssueID !== focusedTicket && dep.targetIssueID !== focusedTicket) {
+            return;
+          }
+
           const sourceEl = document.getElementById(`ticket-${dep.sourceIssueID}`);
           const targetEl = document.getElementById(`ticket-${dep.targetIssueID}`);
           if (sourceEl && targetEl) {
             const sourceRect = sourceEl.getBoundingClientRect();
             const targetRect = targetEl.getBoundingClientRect();
 
-            const sx = sourceRect.right;
-            const sy = sourceRect.top + sourceRect.height / 2;
-            const tx = targetRect.left;
-            const ty = targetRect.top + targetRect.height / 2;
+            // Calculate anchor points relative to the canvas container
+            const sx = sourceRect.right - containerRect.left;
+            const sy = sourceRect.top + sourceRect.height / 2 - containerRect.top;
+            const tx = targetRect.left - containerRect.left;
+            const ty = targetRect.top + targetRect.height / 2 - containerRect.top;
 
             newConnections.push({
               source: dep.sourceIssueID, target: dep.targetIssueID, type: dep.type,
@@ -261,19 +360,26 @@
           }
         });
         setConnections(newConnections);
-      }, []);
+      }, [gridData, showConnections, focusedTicket]);
 
       useEffect(() => {
-        const timer = setTimeout(updateConnections, 300);
-        window.addEventListener('resize', updateConnections);
-        document.addEventListener('scroll', updateConnections, true);
+        const scrollContainer = document.getElementById('grid-scroll-container');
+        const canvasContainer = document.getElementById('canvas-container');
 
-        const interval = setInterval(updateConnections, 1000);
+        if (!scrollContainer || !canvasContainer) return;
+
+        updateConnections();
+
+        const resizeObserver = new ResizeObserver(() => {
+          updateConnections();
+        });
+
+        resizeObserver.observe(canvasContainer);
+        scrollContainer.addEventListener('scroll', updateConnections);
+
         return () => {
-          clearTimeout(timer);
-          clearInterval(interval);
-          window.removeEventListener('resize', updateConnections);
-          document.removeEventListener('scroll', updateConnections, true);
+          resizeObserver.disconnect();
+          scrollContainer.removeEventListener('scroll', updateConnections);
         };
       }, [updateConnections]);
 
@@ -320,8 +426,335 @@
     const STAGES = ['Backlog', 'In Design', 'Dev', 'Test', 'Done'];
 
     const ProcessGrid = () => {
+      const [gridData, setGridData] = useState(mockData);
       const [presentationModeOn, setPresentationModeOn] = useState(false);
       const [activePopover, setActivePopover] = useState(null);
+
+      // Phase 5: Navigation & Multi-Select State
+      const [showConnections, setShowConnections] = useState(true);
+      const [focusedTicket, setFocusedTicket] = useState(null);
+      const [multiSelectedTickets, setMultiSelectedTickets] = useState(new Set());
+      const [hoveredSubtask, setHoveredSubtask] = useState(null);
+
+      // Focus / Select Dispatcher
+      const handleTicketSelect = (id, isMulti = false) => {
+        if (isMulti) {
+          setMultiSelectedTickets(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) newSet.delete(id);
+            else newSet.add(id);
+            return newSet;
+          });
+          setFocusedTicket(null); // Clear single focus when multi-selecting
+          setActivePopover(null);
+        } else {
+          setFocusedTicket(id);
+          setMultiSelectedTickets(new Set()); // Clear multi-select when focusing singly
+          setActivePopover(null);
+        }
+      };
+
+      // Map direct dependencies for Focus Mode
+      const focusedDependencies = useMemo(() => {
+        const deps = new Set();
+        if (!focusedTicket) return deps;
+        gridData.dependencies.forEach(dep => {
+          if (dep.sourceIssueID === focusedTicket) deps.add(dep.targetIssueID);
+          if (dep.targetIssueID === focusedTicket) deps.add(dep.sourceIssueID);
+        });
+        return deps;
+      }, [focusedTicket, gridData.dependencies]);
+
+      // Handle un-focusing if clicking background
+      const handleBackgroundClick = () => {
+        setActivePopover(null);
+        setFocusedTicket(null);
+        setMultiSelectedTickets(new Set());
+      };
+
+      // --- Drag & Drop Handler ---
+      const handleDropIssue = (issueId, sourceTeamId, sourceStage, targetTeamId, targetStage) => {
+        if (sourceTeamId === targetTeamId && sourceStage === targetStage) return; // No movement
+
+        setGridData(prevData => {
+          const newData = { ...prevData, teams: [...prevData.teams] };
+          let movedIssue = null;
+
+          // 1. Remove from source
+          const sourceTeamIdx = newData.teams.findIndex(t => t.id === sourceTeamId);
+          if (sourceTeamIdx > -1) {
+            const newIssues = [...newData.teams[sourceTeamIdx].issues];
+            const issueIdx = newIssues.findIndex(i => i.id === issueId);
+            if (issueIdx > -1) {
+              movedIssue = { ...newIssues[issueIdx], stage: targetStage }; // Update stage
+              newIssues.splice(issueIdx, 1);
+              newData.teams[sourceTeamIdx] = { ...newData.teams[sourceTeamIdx], issues: newIssues };
+            }
+          }
+
+          // 2. Add to target
+          if (movedIssue) {
+            const targetTeamIdx = newData.teams.findIndex(t => t.id === targetTeamId);
+            if (targetTeamIdx > -1) {
+              const newIssues = [...newData.teams[targetTeamIdx].issues, movedIssue];
+              newData.teams[targetTeamIdx] = { ...newData.teams[targetTeamIdx], issues: newIssues };
+            }
+          }
+
+          return newData;
+        });
+      };
+
+      // --- The Smart 'Fuse' Action ---
+      const handleFuseTickets = () => {
+        if (multiSelectedTickets.size < 2) return;
+
+        const fusedId = `FUSE-${Math.floor(Math.random() * 1000)}`;
+        const selectedIds = Array.from(multiSelectedTickets);
+
+        setGridData(prevData => {
+          const newData = { ...prevData, teams: [...prevData.teams] };
+          const subtasks = [];
+          let combinedSummary = "Fused: ";
+
+          // 1. Extract and remove original tickets, saving provenance
+          newData.teams = newData.teams.map(team => {
+            const newIssues = team.issues.filter(issue => {
+              if (multiSelectedTickets.has(issue.id)) {
+                subtasks.push({
+                  ...issue,
+                  originalTeamId: team.id,
+                  originalStage: issue.stage
+                });
+                return false; // Remove it
+              }
+              return true;
+            });
+            return { ...team, issues: newIssues };
+          });
+
+          // Combine summaries
+          combinedSummary += subtasks.map(s => s.id).join(', ');
+
+          // 1.5 Generate Conflict Justification
+          const uniqueTeams = Array.from(new Set(subtasks.map(s => s.originalTeamId)));
+          const allTags = subtasks.filter(s => s.tag).map(s => s.tag);
+
+          // Find duplicates to identify 'shared' tags
+          const tagCounts = allTags.reduce((acc, tag) => { acc[tag] = (acc[tag] || 0) + 1; return acc; }, {});
+          const sharedTags = Object.keys(tagCounts).filter(tag => tagCounts[tag] > 1);
+
+          let justification = "";
+          if (sharedTags.length > 0) {
+            justification = `Consolidated ${subtasks.length} tickets originating from ${uniqueTeams.length} teams (${uniqueTeams.join(', ')}) due to conflicting "${sharedTags.join(', ')}" tags.`;
+          } else {
+            const uniqueTypes = Array.from(new Set(subtasks.map(s => s.type)));
+            justification = `Merged ${subtasks.length} redundant tasks spanning ${uniqueTeams.length} teams. Types combined: ${uniqueTypes.join(', ')}.`;
+          }
+
+          // 2. Create the Master Ticket
+          const masterTicket = {
+            id: fusedId,
+            type: "Epic",
+            summary: combinedSummary,
+            stage: "Backlog",
+            assignee: "Unallocated",
+            subtasks: subtasks,
+            conflictJustification: justification
+          };
+
+          // 3. Add to Unallocated Backlog
+          const unallocatedTeamIdx = newData.teams.findIndex(t => t.id === 'unallocated');
+          if (unallocatedTeamIdx > -1) {
+            newData.teams[unallocatedTeamIdx].issues.push(masterTicket);
+          }
+
+          // Note: We deliberately DO NOT remap dependencies.
+          // By unmounting the original tickets from the DOM, 
+          // the SVG engine will naturally hide their lines until restored.
+
+          return newData;
+        });
+
+        setMultiSelectedTickets(new Set());
+      };
+
+      // --- The Auto-Streamline Action ---
+      const handleAutoStreamline = () => {
+        setGridData(prevData => {
+          let newData = { ...prevData, teams: [...prevData.teams] };
+          const tagMap = {};
+
+          // 1. Identify all tickets that have tags and map them
+          newData.teams.forEach(team => {
+            team.issues.forEach(issue => {
+              if (issue.tag) {
+                if (!tagMap[issue.tag]) tagMap[issue.tag] = [];
+                tagMap[issue.tag].push({ ...issue, originalTeamId: team.id, originalStage: issue.stage });
+              }
+            });
+          });
+
+          const conflictingTags = Object.keys(tagMap).filter(tag => tagMap[tag].length > 1);
+          if (conflictingTags.length === 0) return prevData;
+
+          // 2. Remove grouped subtasks from their original teams
+          const subtaskIdsToRemove = new Set();
+          conflictingTags.forEach(tag => {
+            tagMap[tag].forEach(subtask => subtaskIdsToRemove.add(subtask.id));
+          });
+
+          newData.teams = newData.teams.map(team => {
+            const filteredIssues = team.issues.filter(issue => !subtaskIdsToRemove.has(issue.id));
+            return { ...team, issues: filteredIssues };
+          });
+
+          // 3. Ensure 'Unallocated' team exists
+          let unallocatedTeamIdx = newData.teams.findIndex(t => t.id === 'unallocated');
+          if (unallocatedTeamIdx === -1) {
+            const unallocatedTeam = { id: "unallocated", name: "Unallocated / Global Backlog", capacity: 0, isGlobal: true, issues: [] };
+            newData.teams.push(unallocatedTeam);
+            unallocatedTeamIdx = newData.teams.length - 1;
+          }
+
+          // 4. Create Master Tickets for each conflict
+          conflictingTags.forEach(tag => {
+            const subtasks = tagMap[tag];
+            const fusedId = `FUSE-${Math.floor(Math.random() * 10000)}`;
+            const uniqueTeams = Array.from(new Set(subtasks.map(s => s.originalTeamId)));
+
+            const justification = `Streamlined ${subtasks.length} redundant tasks originating from ${uniqueTeams.length} teams (${uniqueTeams.join(', ')}) due to conflicting "${tag}" tags.`;
+
+            const masterTicket = {
+              id: fusedId,
+              type: "Epic",
+              summary: `Streamlined: [${tag}] Components`,
+              stage: "Backlog",
+              assignee: "Unallocated",
+              subtasks: subtasks,
+              conflictJustification: justification
+            };
+
+            newData.teams[unallocatedTeamIdx].issues.push(masterTicket);
+          });
+
+          return newData;
+        });
+        setMultiSelectedTickets(new Set());
+      };
+
+      // --- Restoration Logistics ---
+      const handleRestoreSubtask = (masterId, subtaskId) => {
+        setGridData(prevData => {
+          const newData = { ...prevData, teams: [...prevData.teams] };
+          const unallocatedTeamIdx = newData.teams.findIndex(t => t.id === 'unallocated');
+          if (unallocatedTeamIdx === -1) return prevData;
+
+          const masterIdx = newData.teams[unallocatedTeamIdx].issues.findIndex(i => i.id === masterId);
+          if (masterIdx === -1) return prevData;
+
+          const masterTicket = newData.teams[unallocatedTeamIdx].issues[masterIdx];
+          const subtaskIdx = masterTicket.subtasks.findIndex(s => s.id === subtaskId);
+          if (subtaskIdx === -1) return prevData;
+
+          // 1. Extract the subtask
+          const subtask = masterTicket.subtasks[subtaskIdx];
+
+          // 2. Remove from Master
+          const updatedSubtasks = [...masterTicket.subtasks];
+          updatedSubtasks.splice(subtaskIdx, 1);
+
+          // 3. Restore to Original Location
+          const targetTeamIdx = newData.teams.findIndex(t => t.id === subtask.originalTeamId);
+          if (targetTeamIdx > -1) {
+            // Strip the 'original' metadata before pushing back
+            const { originalTeamId, originalStage, ...restoredIssue } = subtask;
+            restoredIssue.stage = originalStage; // Ensure it's in the right stage
+
+            const updatedTeamIssues = [...newData.teams[targetTeamIdx].issues, restoredIssue];
+            newData.teams[targetTeamIdx] = { ...newData.teams[targetTeamIdx], issues: updatedTeamIssues };
+          }
+
+          // 4. Update or Delete Master
+          if (updatedSubtasks.length === 0) {
+            // Destroy the Master if empty
+            let newUnallocatedIssues = [...newData.teams[unallocatedTeamIdx].issues];
+            newUnallocatedIssues.splice(masterIdx, 1);
+
+            if (newUnallocatedIssues.length === 0) {
+              // Destroy Unallocated Row completely
+              newData.teams.splice(unallocatedTeamIdx, 1);
+            } else {
+              newData.teams[unallocatedTeamIdx] = { ...newData.teams[unallocatedTeamIdx], issues: newUnallocatedIssues };
+            }
+            setFocusedTicket(null); // Close panel if looking at it
+          } else {
+            // Update Master
+            const updatedMaster = { ...masterTicket, subtasks: updatedSubtasks, summary: "Fused: " + updatedSubtasks.map(s => s.id).join(', ') };
+            const newUnallocatedIssues = [...newData.teams[unallocatedTeamIdx].issues];
+            newUnallocatedIssues[masterIdx] = updatedMaster;
+            newData.teams[unallocatedTeamIdx] = { ...newData.teams[unallocatedTeamIdx], issues: newUnallocatedIssues };
+          }
+
+          return newData;
+        });
+      };
+
+      const handleResetAll = (masterId) => {
+        // To prevent complex mid-render array mutations, we iterate processing each subtask
+        const master = gridData.teams.find(t => t.id === 'unallocated')?.issues.find(i => i.id === masterId);
+        if (!master || !master.subtasks) return;
+
+        master.subtasks.forEach((subtask, index) => {
+          setTimeout(() => {
+            handleRestoreSubtask(masterId, subtask.id);
+          }, index * 50);
+        });
+      };
+
+      const handleGlobalResetView = () => {
+        const unallocatedTeam = gridData.teams.find(t => t.id === 'unallocated');
+        if (!unallocatedTeam || unallocatedTeam.issues.length === 0) return;
+
+        unallocatedTeam.issues.forEach((masterTicket, mIdx) => {
+          if (masterTicket.subtasks) {
+            masterTicket.subtasks.forEach((subtask, index) => {
+              setTimeout(() => {
+                handleRestoreSubtask(masterTicket.id, subtask.id);
+              }, (mIdx * 100) + (index * 50));
+            });
+          }
+        });
+      };
+
+      // Derived details for Side Panel
+      const focusedTicketDetails = useMemo(() => {
+        if (!focusedTicket) return null;
+        let details = null;
+        let currentTeamId = null;
+        let currentStage = null;
+
+        gridData.teams.forEach(team => {
+          team.issues.forEach(issue => {
+            if (issue.id === focusedTicket) {
+              details = issue;
+              currentTeamId = team.id;
+              currentStage = issue.stage;
+            }
+          });
+        });
+
+        if (!details) return null;
+
+        let blocksCount = 0;
+        let blockedByCount = 0;
+        gridData.dependencies.forEach(dep => {
+          if (dep.sourceIssueID === focusedTicket && dep.type === 'blocks') blocksCount++;
+          if (dep.targetIssueID === focusedTicket && dep.type === 'blocks') blockedByCount++;
+        });
+
+        return { ...details, currentTeamId, currentStage, blocksCount, blockedByCount };
+      }, [focusedTicket, gridData]);
 
       // --- Governance Engine ---
       const governanceCalculations = useMemo(() => {
@@ -334,7 +767,7 @@
         const conflictTickets = new Set();
 
         // 1. First pass to map tags and assignees
-        mockData.teams.forEach(team => {
+        gridData.teams.forEach(team => {
           team.issues.forEach(issue => {
             // Resource Risk: Dev tickets per assignee
             if (issue.stage.toLowerCase() === 'dev' && issue.assignee && issue.assignee !== 'Unassigned') {
@@ -356,7 +789,7 @@
         });
 
         // 3. Conflict Detection & Redundancy Score calculation
-        mockData.teams.forEach(team => {
+        gridData.teams.forEach(team => {
           team.issues.forEach(issue => {
             if (issue.tag && tagMap[issue.tag].size > 1) {
               redundantTags++; // Any ticket with a shared tag is redundant
@@ -372,16 +805,19 @@
         const redundancyPercent = totalTags > 0 ? Math.round((redundantTags / totalTags) * 100) : 0;
 
         return {
-          totalDependencies: mockData.dependencies.length,
+          totalDependencies: gridData.dependencies.length,
           resourceRisk: riskScore,
           redundancyScore: redundancyPercent,
           conflictTickets
         };
-      }, []);
+      }, [gridData]);
 
-      // --- Data Transformation for Grid ---
-      const teamData = useMemo(() => {
-        return mockData.teams.map(team => {
+      // --- Data Transformation & Critical Path ---
+      const { teamData, criticalPathNodes } = useMemo(() => {
+        let activeNodes = new Set();
+        const terminalTickets = [];
+
+        const formatData = gridData.teams.map(team => {
           const stages = STAGES.map(name => ({ name, issues: [] }));
           let wipCount = 0;
 
@@ -391,20 +827,39 @@
 
             stages[stageIdx].issues.push(issue);
 
-            if (stageIdx > 0 && stageIdx < STAGES.length - 1) {
+            // Calculate WIP (exclude Backlog and Done from Global Backlog logic if needed, but keeping simple here)
+            if (stageIdx > 0 && stageIdx < STAGES.length - 1 && !team.isGlobal) {
               wipCount++;
+            }
+
+            if (stageIdx >= STAGES.length - 2) {
+              terminalTickets.push(issue.id);
+              activeNodes.add(issue.id);
             }
           });
 
           return { ...team, stages, wipCount };
         });
-      }, []);
 
-      // (Placeholder for Presentation Mode Logic)
-      const inPresentationPath = new Set();
+        // Critical Path Graph Traversal (Backwards)
+        let changed = true;
+        while (changed) {
+          changed = false;
+          gridData.dependencies.forEach(dep => {
+            if (activeNodes.has(dep.targetIssueID) && !activeNodes.has(dep.sourceIssueID)) {
+              activeNodes.add(dep.sourceIssueID);
+              changed = true;
+            }
+          });
+        }
+
+        return { teamData: formatData, criticalPathNodes: activeNodes };
+      }, [gridData]);
+
+      const gridColsConfig = presentationModeOn ? `0px repeat(${STAGES.length}, 240px)` : `260px repeat(${STAGES.length}, 240px)`;
 
       return (
-        <div className="min-h-screen bg-atlassian-background-gray pb-8 relative overflow-x-auto">
+        <div id="grid-scroll-container" className="min-h-screen bg-atlassian-background-gray pb-8 relative overflow-x-auto" onClick={handleBackgroundClick}>
           {/* Governance Dashboard Header */}
           <div className="sticky top-0 z-40 bg-white border-b border-atlassian-border shadow-sm px-8 py-4 mb-6 flex items-center justify-between">
             <div>
@@ -437,40 +892,282 @@
                   {governanceCalculations.redundancyScore}%
                 </span>
               </div>
+
+              <div className="ml-4 pl-4 border-l border-gray-200">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPresentationModeOn(!presentationModeOn); }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-jira text-sm font-semibold transition-colors ${presentationModeOn ? 'bg-atlassian-primary text-white scale-105 shadow-md hover:bg-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  <Icon name={presentationModeOn ? "eye" : "eye-off"} size={16} color={presentationModeOn ? "#FFF" : "#4A5568"} />
+                  {presentationModeOn ? "Exit Presentation" : "Show Critical Path"}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="mx-auto w-max relative min-w-full px-8 transition-all duration-500">
-            <div className="grid gap-y-2 relative" style={{ gridTemplateColumns: `260px repeat(${STAGES.length}, 240px)` }}>
-              <div className="col-start-1 text-xs font-semibold text-gray-500 uppercase tracking-wider p-2">Team Info</div>
+          {/* Control Toolbar */}
+          <div className="sticky top-[88px] z-30 bg-atlassian-background-default border-b border-atlassian-border px-8 py-2 mb-4 flex items-center justify-between shadow-sm shadow-blue-900/5">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Icon name="filter" size={14} color="#6B778C" />
+                <span className="text-xs font-semibold text-gray-600">Filters:</span>
+              </div>
+              <button className="text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors flex items-center gap-1.5">
+                <Icon name="users" size={12} /> Assignee
+              </button>
+              <button className="text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded transition-colors flex items-center gap-1.5">
+                <Icon name="tag" size={12} /> Tags
+              </button>
+              {multiSelectedTickets.size > 1 && (
+                <button
+                  onClick={handleFuseTickets}
+                  className="ml-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-jira transition-colors flex items-center gap-1.5 shadow-md animate-in fade-in zoom-in"
+                >
+                  <Icon name="git-merge" size={12} color="#FFF" /> Fuse into Unallocated ({multiSelectedTickets.size})
+                </button>
+              )}
+              <button
+                onClick={handleAutoStreamline}
+                className="ml-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-1.5 rounded-jira transition-colors flex items-center gap-1.5 shadow-md flex-shrink-0"
+              >
+                <Icon name="wand" size={12} color="#FFF" /> Auto-Streamline
+              </button>
+              <button
+                onClick={handleGlobalResetView}
+                className="ml-2 text-xs font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 px-4 py-1.5 rounded-jira transition-colors flex items-center gap-1.5 shadow-sm flex-shrink-0"
+              >
+                <Icon name="refresh-ccw" size={12} /> Reset View
+              </button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 border-r border-gray-200 pr-4">
+                <label className="text-xs font-semibold text-gray-600 cursor-pointer flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-atlassian-primary focus:ring-atlassian-primary w-3.5 h-3.5"
+                    checked={showConnections}
+                    onChange={(e) => setShowConnections(e.target.checked)}
+                  />
+                  Show Connections
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${focusedTicket ? 'bg-[#FFEB3B]/20 text-[#FF8B00]' : 'bg-gray-100 text-gray-400'}`}>
+                  Focus Mode {focusedTicket ? 'ON' : 'OFF'}
+                </span>
+                {focusedTicket && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setFocusedTicket(null); }}
+                    className="text-xs text-red-500 hover:text-red-700 font-semibold"
+                  >
+                    Clear Focus
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div id="canvas-container" className="mx-auto w-max relative min-w-full px-8 transition-all duration-500">
+            <div className="grid gap-y-2 relative transition-all duration-500" style={{ gridTemplateColumns: gridColsConfig }}>
+              <div className={`col-start-1 text-xs font-semibold text-gray-500 uppercase tracking-wider p-2 transition-opacity duration-300 ${presentationModeOn ? 'opacity-0 overflow-hidden' : 'opacity-100'}`}>Team Info</div>
               {STAGES.map((s, idx) => (
                 <div key={idx} className="text-xs font-semibold text-gray-500 uppercase tracking-wider p-2">{s}</div>
               ))}
 
               {teamData.map(team => (
                 <Fragment key={team.id}>
-                  <div className="bg-white border border-atlassian-border rounded-l-jira p-4 flex flex-col justify-center sticky left-0 z-10 shadow-sm transition-opacity duration-300">
-                    <h3 className="text-sm font-bold text-gray-800 font-sans">{team.name}</h3>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-gray-500 font-sans">Vel: {team.capacity} <span className="text-gray-400">pt</span></span>
-                      <span className="text-[10px] text-gray-300">|</span>
-                      <span className="text-xs text-gray-500 font-sans font-medium text-atlassian-primary bg-blue-50 px-1.5 py-0.5 rounded">WIP: {team.wipCount}</span>
-                    </div>
+                  <div className={`bg-white border border-atlassian-border p-4 flex flex-col justify-center sticky left-0 z-10 shadow-sm transition-all duration-300 ${team.isGlobal ? (hoveredSubtask ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200 shadow-md' : 'bg-[#FFFAE6] border-amber-200 shadow-md') : 'rounded-l-jira'} ${presentationModeOn && !team.isGlobal ? 'opacity-0 translate-x-[-100px] absolute pointer-events-none' : 'opacity-100 translate-x-0'}`}>
+                    <h3 className={`text-sm font-bold font-sans ${team.isGlobal ? (hoveredSubtask ? 'text-indigo-800' : 'text-amber-800') : 'text-gray-800'}`}>{team.name}</h3>
+                    {!team.isGlobal && (
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-xs text-gray-500 font-sans">Vel: {team.capacity} <span className="text-gray-400">pt</span></span>
+                        <span className="text-[10px] text-gray-300">|</span>
+                        <span className="text-xs text-gray-500 font-sans font-medium text-atlassian-primary bg-blue-50 px-1.5 py-0.5 rounded">WIP: {team.wipCount}</span>
+                      </div>
+                    )}
                   </div>
                   {team.stages.map((stage, idx) => (
-                    <div key={idx} className={`border-t border-b border-atlassian-border ${idx === team.stages.length - 1 ? 'border-r rounded-r-jira' : 'border-r'} bg-white transition-colors duration-300`}>
+                    <div key={idx} className={`border-t border-b border-atlassian-border ${idx === team.stages.length - 1 ? 'border-r rounded-r-jira' : 'border-r'} ${idx === 0 && presentationModeOn ? 'border-l rounded-l-jira' : ''} ${team.isGlobal ? (hoveredSubtask ? 'bg-indigo-50/40 border-y-indigo-300 shadow-sm z-0 transition-all duration-300' : 'bg-[#FFFAE6] border-y-amber-200 shadow-sm z-0') : 'bg-white'} transition-colors duration-300`}>
                       <StageCell
                         issues={stage.issues}
+                        teamId={team.id}
+                        stageName={stage.name}
+                        onDropIssue={handleDropIssue}
                         conflictTickets={governanceCalculations.conflictTickets}
-                        inPresentationPath={inPresentationPath}
+                        inPresentationPath={criticalPathNodes}
                         presentationModeOn={presentationModeOn}
+                        focusedTicket={focusedTicket}
+                        multiSelectedTickets={multiSelectedTickets}
+                        focusedDependencies={focusedDependencies}
+                        onFocusSelect={handleTicketSelect}
                       />
                     </div>
                   ))}
                 </Fragment>
               ))}
             </div>
-            <OverlayCanvas />
+
+            <OverlayCanvas
+              activePopover={activePopover}
+              setActivePopover={setActivePopover}
+              presentationModeOn={presentationModeOn}
+              gridData={gridData}
+              showConnections={showConnections}
+              focusedTicket={focusedTicket}
+              focusedDependencies={focusedDependencies}
+            />
+
+            {/* Resolution Popover */}
+            {activePopover && (
+              <div
+                className="fixed z-[100] bg-white rounded-jira shadow-xl border border-atlassian-border p-3 w-64 animate-in fade-in zoom-in duration-200"
+                style={{ top: activePopover.y + 10, left: activePopover.x + 10 }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
+                  <Icon name="link" color="#0052CC" size={14} />
+                  <span className="text-xs font-bold text-gray-700 flex-grow">Dependency Detail</span>
+                  <span className="text-[10px] bg-blue-50 text-atlassian-primary px-1 font-bold uppercase rounded">{activePopover.conn.type}</span>
+                </div>
+                <div className="text-xs text-gray-600 mb-2">
+                  <span className="font-semibold text-gray-800">{activePopover.conn.source}</span> impacts <span className="font-semibold text-gray-800">{activePopover.conn.target}</span>.
+                </div>
+                <div className="bg-[#EAE6FF] rounded p-2 border border-[#DFD8FD]">
+                  <span className="text-[10px] font-bold text-[#403294] uppercase flex items-center gap-1 mb-1">
+                    <Icon name="zap" color="#403294" size={10} /> suggested action
+                  </span>
+                  <p className="text-xs text-[#505F79] font-medium leading-tight">
+                    Merge redundant resource allocations into a Shared Core Library to unblock parallel workstreams.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sliding Side Panel */}
+          <div className={`fixed top-[88px] right-0 bottom-0 w-80 bg-white border-l border-atlassian-border shadow-2xl transition-transform duration-300 z-50 flex flex-col ${focusedTicketDetails ? 'translate-x-0' : 'translate-x-full'}`} onClick={(e) => e.stopPropagation()}>
+            {focusedTicketDetails && (
+              <>
+                <div className="p-4 border-b border-atlassian-border flex items-center justify-between bg-atlassian-background-gray">
+                  <div className="flex items-center gap-2">
+                    <Icon name={getIconDetails(focusedTicketDetails.type).name} color={getIconDetails(focusedTicketDetails.type).color} size={16} />
+                    <span className="text-sm font-bold text-gray-800 font-sans">{focusedTicketDetails.id}</span>
+                  </div>
+                  <button onClick={() => setFocusedTicket(null)} className="text-gray-400 hover:text-gray-700 bg-gray-200 hover:bg-gray-300 rounded p-1 transition-colors">
+                    <Icon name="x" size={16} />
+                  </button>
+                </div>
+
+                <div className="p-4 flex-grow overflow-y-auto">
+                  <h2 className="text-lg font-bold text-gray-900 leading-tight mb-4">{focusedTicketDetails.summary}</h2>
+
+                  <div className="flex flex-col gap-4 mb-6">
+                    <div>
+                      <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Status</span>
+                      <span className="inline-block bg-blue-50 text-atlassian-primary text-xs font-bold px-2 py-1 rounded">
+                        {focusedTicketDetails.stage.toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Assignee</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                          {focusedTicketDetails.assignee ? focusedTicketDetails.assignee.charAt(0) : '?'}
+                        </div>
+                        <span className="text-sm text-gray-800 font-medium">{focusedTicketDetails.assignee || 'Unassigned'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-6 p-3 bg-[#FFFAE6] border border-amber-200 rounded-jira">
+                    <span className="block text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <Icon name="share-2" size={12} /> Dependency Map
+                    </span>
+                    <div className="flex flex-col gap-1 text-sm text-gray-700">
+                      <div><span className="font-bold">{focusedTicketDetails.blocksCount}</span> tickets blocked by this</div>
+                      <div><span className="font-bold">{focusedTicketDetails.blockedByCount}</span> tickets blocking this</div>
+                    </div>
+                  </div>
+
+                  {focusedTicketDetails.conflictJustification && (
+                    <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-jira p-3">
+                      <span className="block text-[10px] font-bold text-indigo-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Icon name="info" size={12} /> Conflict Intelligence
+                      </span>
+                      <p className="text-xs text-indigo-900 leading-snug font-medium">
+                        {focusedTicketDetails.conflictJustification}
+                      </p>
+                    </div>
+                  )}
+
+                  {focusedTicketDetails.subtasks && focusedTicketDetails.subtasks.length > 0 && (
+                    <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-jira animate-in slide-in-from-right duration-300">
+                      <span className="block text-[10px] font-bold text-atlassian-primary uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Icon name="layers" size={12} /> Subtasks ({focusedTicketDetails.subtasks.length})
+                      </span>
+                      <div className="flex flex-col gap-2">
+                        {focusedTicketDetails.subtasks.map(subtask => (
+                          <div
+                            key={subtask.id}
+                            className="text-xs text-gray-700 bg-white p-2 rounded border border-gray-200 shadow-sm transition-all hover:border-indigo-400 hover:ring-1 hover:ring-indigo-400 relative group cursor-default"
+                            onMouseEnter={() => setHoveredSubtask(subtask.id)}
+                            onMouseLeave={() => setHoveredSubtask(null)}
+                          >
+                            <div className="font-bold text-gray-900 flex items-center justify-between mb-1">
+                              <span className="flex items-center gap-1.5">
+                                <Icon name={getIconDetails(subtask.type).name} color={getIconDetails(subtask.type).color} size={10} />
+                                {subtask.id}
+                              </span>
+                              <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-100 px-1 rounded">
+                                {subtask.originalTeamId}
+                              </span>
+                            </div>
+                            <p className="line-clamp-2 text-gray-600 mb-2">{subtask.summary}</p>
+                            <div className="flex items-center justify-between border-t border-gray-100 pt-1.5 mt-1">
+                              <span className="text-[10px] font-normal text-gray-500 flex items-center gap-1">
+                                <Icon name="user" size={10} /> {subtask.assignee || 'Unassigned'}
+                              </span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleRestoreSubtask(focusedTicketDetails.id, subtask.id); }}
+                                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                              >
+                                <Icon name="rotate-ccw" size={10} /> Restore
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Reassign to Team</span>
+                    <select
+                      className="w-full border border-gray-300 rounded p-2 text-sm text-gray-800 focus:ring-atlassian-primary focus:border-atlassian-primary bg-white shadow-sm"
+                      value={focusedTicketDetails.currentTeamId}
+                      onChange={(e) => {
+                        const targetTeamId = e.target.value;
+                        handleDropIssue(focusedTicketDetails.id, focusedTicketDetails.currentTeamId, focusedTicketDetails.currentStage, targetTeamId, 'Backlog');
+                      }}
+                    >
+                      {gridData.teams.map(team => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1 mb-6 italic">Assigning a ticket will place it in the team's Backlog.</p>
+
+                    {focusedTicketDetails.subtasks && focusedTicketDetails.subtasks.length > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleResetAll(focusedTicketDetails.id); }}
+                        className="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-2 px-4 rounded transition-colors text-xs shadow-sm"
+                      >
+                        <Icon name="trash-2" size={14} /> Unpack & Destroy Master
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       );
